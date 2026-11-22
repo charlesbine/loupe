@@ -14,8 +14,8 @@ sliders, and --group so chosen parts explode as one rigid body (e.g. keep the PC
 glass + connectors together while the case shells fly off).
 
 Usage:
-  uv run tools/viewer.py body.stl lid.stl -o preview.html --title "Device enclosure"
-  uv run tools/viewer.py case_body.stl case_panel.stl pcb.stl glass.stl io.stl \\
+  uv run viewer.py body.stl lid.stl -o preview.html --title "Device enclosure"
+  uv run viewer.py case_body.stl case_panel.stl pcb.stl glass.stl io.stl \\
       --group module=pcb,glass,io -o preview.html   # module stays rigid on explode
 
 Regenerate any time; keep the HTML open in a browser and refresh.

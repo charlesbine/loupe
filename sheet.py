@@ -438,7 +438,7 @@ def main() -> None:
             val = parse_pos(pos.strip(), lo[ax], hi[ax])
             pct = 100 * (val - lo[ax]) / max(hi[ax] - lo[ax], 1e-6)
             im, hit = render_slice(parts, ax, val, TILE_W, TILE_H, bounds)
-            note = f"  ⚠ INTERFERENCE {hit:.1f}mm²" if hit else ""
+            note = f"  ! INTERFERENCE {hit:.1f}mm²" if hit else ""
             tiles.append(caption(im, f"slice {axname.upper()}={val:.1f}mm ({pct:.0f}%){note}", warn=bool(hit)))
 
     if not tiles:

@@ -1,6 +1,18 @@
+<div align="center">
+
 # loupe
 
 **A code-CAD review pipeline for 3D printing and PCBs: render it, prove it, preview it, slice it — or fab it.**
+
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![uv PEP 723](https://img.shields.io/badge/uv-PEP%20723%20zero--setup-DE5FE9)](https://docs.astral.sh/uv/)
+[![build123d & KiCad 10](https://img.shields.io/badge/CAD-build123d%20%7C%20KiCad%2010-2E7D32)](#the-pcb-pipeline)
+[![MCP Server](https://img.shields.io/badge/MCP-7%20agent%20tools-111827)](#for-agents)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+
+**[Live Interactive 3D Viewer & Showcase ↗](https://charlesbine.com/projects/loupe/)**
+
+</div>
 
 ![Cross-section slices of a threaded jar and screw lid: a vertical cut plus two horizontal cuts, each part in its own color on a world-mm grid. The male and female threads interlock and the black clearance gap between their flanks is clearly visible.](docs/img/hero-slices.png)
 
@@ -73,7 +85,7 @@ It's written to be driven by a human at a terminal **or** by an AI coding agent 
 - **`slice.py` only:** a local **Bambu Studio** install. Paths default to macOS (`/Applications/BambuStudio.app`); adjust the two constants at the top for Linux/Windows. The other three tools are cross-platform.
 
 ```sh
-git clone https://github.com/<you>/loupe.git
+git clone https://github.com/charlesbine/loupe.git
 cd loupe
 uv run check.py your_part.stl        # first run resolves deps; subsequent runs are instant
 uv run examples/threaded_jar.py      # regenerate the threaded-jar model used in the shots above
@@ -86,6 +98,8 @@ uv run examples/threaded_jar.py      # regenerate the threaded-jar model used in
 ### `draft.py` / `draftcheck.py` / `draftsheet.py` — the planning stage
 
 `check.py` proves the model you built. It cannot tell you that you built the *wrong* model: a wall that's 1.8 mm when you meant 2.4 mm is watertight, collision-free, and wrong. A **draft** is the record that makes that a failing assertion — a YAML file of named dimensions, each with a tolerance and a note saying where the number came from, plus simple 2D profiles that reference them.
+
+![Dimensioned engineering draft sheet of a coupon case showing top and side orthographic drawings with tolerance callouts alongside a full dimension provenance table.](docs/img/draft-sheet.png)
 
 ```yaml
 dims:
@@ -155,9 +169,9 @@ uv run sheet.py a.stl --views none --slice z=10,20,30                    # slice
 
 ### `viewer.py` — self-contained browser viewer (the human's eyes)
 
-One HTML file (GLB embedded as base64, three.js from CDN): orbit controls, an adaptive mm grid with tick numbers in **world mm on all three axes**, per-part legend, explode toggle, auto-rotate (remembered in localStorage), and **double-ended clip sliders per axis** (keep the slab between two handles).
+One HTML file (GLB embedded as base64, three.js from CDN): orbit controls, an adaptive mm grid with occluded world-space tick labels on all three axes, per-part legend, explode toggle, auto-rotate (remembered in localStorage), and **double-ended clip sliders per axis** with **solid stencil section caps** (so clipped views read as cut solids instead of hollow shells).
 
-![The self-contained browser viewer showing a device enclosure on a world-mm grid with colored X/Y/Z axes, a per-part legend, and explode and per-axis clip-plane controls.](docs/img/viewer.png)
+![The self-contained browser viewer showing a threaded jar and screw lid sectioned along the X axis with solid stencil section caps on a world-mm grid, exposing the interlocking helical threads and physical clearance gap alongside per-part legend, explode, and per-axis clip-plane controls.](docs/img/viewer.png)
 
 ```sh
 uv run viewer.py body.stl lid.stl -o preview.html --title "My part"
@@ -253,7 +267,7 @@ Model multi-part designs in **assembled coordinates** and export both the indivi
 This pipeline is built to be driven by an AI coding agent as much as a human. Two surfaces:
 
 - **[AGENTS.md](AGENTS.md)** — terse operational guide any agent harness (Claude Code, Cursor, Aider, …) can read: the review loop, the exact commands, and the gotchas that waste tokens.
-- **`loupe_mcp.py`** — an MCP server exposing `check`, `sheet`, and `slice`. Crucially, **`sheet` returns the contact sheet inline as an image**, so an agent sees the render in the same turn instead of writing a file and reading it back. Wire it up once:
+- **`loupe_mcp.py`** — an MCP server exposing all **7** tools: `draft_check`, `draft_sheet`, `check`, `sheet`, `slice`, `project_status`, and `project_run`. Crucially, **`sheet` and `draft_sheet` return their rendered drawings inline as PNGs**, so an agent sees the render in the same turn instead of writing a file and reading it back. Wire it up once:
 
   ```sh
   claude mcp add loupe -- uv run /ABS/PATH/TO/loupe/loupe_mcp.py
