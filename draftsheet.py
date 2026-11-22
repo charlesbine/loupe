@@ -171,15 +171,17 @@ def build_dxf(draft: Draft, view: View):
 
 
 def render_dxf(doc, w: int, h: int) -> Image.Image:
-    fig = plt.figure(figsize=(w / 100, h / 100), dpi=100)
-    ax = fig.add_axes([0.02, 0.02, 0.96, 0.96])
+    fig = plt.figure(figsize=(w / 100, h / 100), dpi=200)
+    ax = fig.add_axes([0.04, 0.04, 0.92, 0.92])
     try:
         Frontend(RenderContext(doc), MatplotlibBackend(ax),
                  config=Configuration(color_policy=ColorPolicy.BLACK)
                  ).draw_layout(doc.modelspace(), finalize=True)
+        ax.set_aspect("equal", adjustable="box")
+        ax.autoscale_view()
         ax.set_axis_off()
         buf = io.BytesIO()
-        fig.savefig(buf, format="png", dpi=100, facecolor="white")
+        fig.savefig(buf, format="png", dpi=200, facecolor="white")
     finally:
         plt.close(fig)
     buf.seek(0)
