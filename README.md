@@ -2,7 +2,7 @@
 
 # loupe
 
-**A code-CAD review pipeline for 3D printing and PCBs: render it, prove it, preview it, slice it — or fab it.**
+**A code-CAD review pipeline for 3D printing and PCBs. Render it, prove it, preview it, slice it, or fab it.**
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![uv PEP 723](https://img.shields.io/badge/uv-PEP%20723%20zero--setup-DE5FE9)](https://docs.astral.sh/uv/)
@@ -14,7 +14,7 @@
 
 </div>
 
-![Cross-section slices of a threaded jar and screw lid: a vertical cut plus two horizontal cuts, each part in its own color on a world-mm grid. The male and female threads interlock and the black clearance gap between their flanks is clearly visible.](docs/img/hero-slices.png)
+![Four-tile contact sheet of the 5-part Desk Sensor Pod: isometric view, 3D cutaway at Y=28mm, longitudinal cross-section slice showing the lip-and-groove seam, OLED risers, RF shield can, and fluted rotary knob over the encoder shaft, plus a horizontal slice at Z=11mm showing M2.5 standoffs, side louvres, and rear USB-C alignment.](docs/img/hero-slices.png)
 
 Single-file [`uv`](https://docs.astral.sh/uv/) scripts — zero setup, inline dependencies — that turn a parametric model into something you (or an LLM agent) can actually *trust* before committing filament (or a fab order) to it:
 
@@ -72,9 +72,9 @@ This pipeline was built during a real reverse-engineering job — modeling a par
 
 It's written to be driven by a human at a terminal **or** by an AI coding agent — the contact sheet exists precisely because an agent can `Read` a PNG, and the deterministic checks exist because "looks right" is not a specification.
 
-![Two cross-section slices through a threaded jar whose lid has been shoved off-axis so the threads collide; the overlap is painted solid red and each tile's caption reads a measured interference area in mm².](docs/img/interference.png)
+![Staged collision on the 5-part Desk Sensor Pod: identical on the exterior isometric view, while a forgotten internal bezel rib crashes through the OLED module and RF shield can, painted bright red with 95.9 mm² and 56.0 mm² measured interference.](docs/img/interference.png)
 
-*A staged collision: the screw lid shoved off-axis so its thread crashes the neck. `sheet.py` paints the overlap red and prints the measured area into the caption; `check.py` turns the same fact into a nonzero exit code. This is the thing a pretty render can never tell you.*
+*A staged internal collision: identical from the outside, while a forgotten bezel rib crashes straight through the OLED display and RF shield can inside. `sheet.py` paints the overlap red and prints the measured area into the caption; `check.py` turns the same fact into a nonzero exit code. This is the thing a pretty render can never tell you.*
 
 ---
 
@@ -88,7 +88,7 @@ It's written to be driven by a human at a terminal **or** by an AI coding agent 
 git clone https://github.com/charlesbine/loupe.git
 cd loupe
 uv run check.py your_part.stl        # first run resolves deps; subsequent runs are instant
-uv run examples/threaded_jar.py      # regenerate the threaded-jar model used in the shots above
+uv run examples/sensor_pod.py        # regenerate the 5-part Desk Sensor Pod used in the shots above
 ```
 
 ---
@@ -171,7 +171,7 @@ uv run sheet.py a.stl --views none --slice z=10,20,30                    # slice
 
 One HTML file (GLB embedded as base64, three.js from CDN): orbit controls, an adaptive mm grid with occluded world-space tick labels on all three axes, per-part legend, explode toggle, auto-rotate (remembered in localStorage), and **double-ended clip sliders per axis** with **solid stencil section caps** (so clipped views read as cut solids instead of hollow shells).
 
-![The self-contained browser viewer showing a threaded jar and screw lid sectioned along the X axis with solid stencil section caps on a world-mm grid, exposing the interlocking helical threads and physical clearance gap alongside per-part legend, explode, and per-axis clip-plane controls.](docs/img/viewer.png)
+![The self-contained browser viewer showing the 5-part Desk Sensor Pod sectioned along Y=28mm with solid stencil section caps on a world-mm grid, exposing the fluted rotary knob, encoder shaft, beveled OLED window, RF shield can, and stepped enclosure seam alongside per-part legend, explode, and clip-plane controls.](docs/img/viewer.png)
 
 ```sh
 uv run viewer.py body.stl lid.stl -o preview.html --title "My part"

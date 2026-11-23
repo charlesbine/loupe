@@ -309,7 +309,7 @@ new GLTFLoader().parse(toBuf(B64), '', (gltf) => {
   scene.add(lineSeg(zticks, 0x6ba8ff, 0.9));
   const dims = label(`${size.x.toFixed(0)}×${size.y.toFixed(0)}×${size.z.toFixed(0)}mm`,
                      '#aeb6c2', step*2.6);
-  dims.position.set(center.x, gy0 - step*2, z0 + 1); scene.add(dims);
+  dims.position.set(center.x, gy0 - step*4.2, z0 + 1); scene.add(dims);
 
   // ── section caps: fill each part's clip-cut face with a solid stencil section, so a
   // clipped view reads as cut solids instead of xray-through-hollow-shells ──
@@ -385,7 +385,7 @@ new GLTFLoader().parse(toBuf(B64), '', (gltf) => {
 
   const r = Math.max(size.x, size.y, size.z);
   controls.target.copy(center);
-  camera.position.set(center.x - r*0.9, center.y - r*1.4, center.z + r*1.1);
+  camera.position.set(center.x - r*1.22, center.y - r*1.90, center.z + r*1.38);
   camera.near = r/100; camera.far = r*40; camera.updateProjectionMatrix();
   key.position.set(center.x - r, center.y - r*0.8, center.z + r*2.2);
   key.target.position.copy(center);

@@ -185,7 +185,11 @@ def render_dxf(doc, w: int, h: int) -> Image.Image:
     finally:
         plt.close(fig)
     buf.seek(0)
-    return Image.open(buf).convert("RGB").resize((w, h), Image.LANCZOS)
+    raw = Image.open(buf).convert("RGB")
+    raw.thumbnail((w - 16, h - 16), Image.LANCZOS)
+    canvas = Image.new("RGB", (w, h), PAPER)
+    canvas.paste(raw, ((w - raw.width) // 2, (h - raw.height) // 2))
+    return canvas
 
 
 # ---------------------------------------------------------------- sheet assembly
