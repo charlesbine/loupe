@@ -58,8 +58,8 @@ views:
     dims:
       - {linear: [[0, 0], [case_w, 0]], offset: -10, tol_from: case_w}
       - {linear: [[0, 0], [0, case_d]], offset: -10, tol_from: case_d}
-      - {diameter: m2,  angle: 60,  tol_from: m2_clear_d}
-      - {diameter: led, angle: 250}
+      - {diameter: m2,  angle: 200, tol_from: m2_clear_d}
+      - {diameter: led, angle: 180}
       - {linear: [[0, m2_y], [m2_x, m2_y]], offset: 8}    # locate M2 in x
       - {linear: [[m2_x, 0], [m2_x, m2_y]], offset: -5}   # ...and in y
 

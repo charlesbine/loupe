@@ -1,8 +1,20 @@
+<div align="center">
+
 # loupe
 
-**A code-CAD review pipeline for 3D printing and PCBs: render it, prove it, preview it, slice it — or fab it.**
+**A code-CAD review pipeline for 3D printing and PCBs. Render it, prove it, preview it, slice it, or fab it.**
 
-![Cross-section slices of a threaded jar and screw lid: a vertical cut plus two horizontal cuts, each part in its own color on a world-mm grid. The male and female threads interlock and the black clearance gap between their flanks is clearly visible.](docs/img/hero-slices.png)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![uv PEP 723](https://img.shields.io/badge/uv-PEP%20723%20zero--setup-DE5FE9)](https://docs.astral.sh/uv/)
+[![build123d & KiCad 10](https://img.shields.io/badge/CAD-build123d%20%7C%20KiCad%2010-2E7D32)](#the-pcb-pipeline)
+[![MCP Server](https://img.shields.io/badge/MCP-7%20agent%20tools-111827)](#for-agents)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+
+**[Live Interactive 3D Viewer & Showcase ↗](https://charlesbine.com/projects/loupe/)**
+
+</div>
+
+![Four-tile contact sheet of the 5-part Desk Sensor Pod: isometric view, 3D cutaway at Y=28mm, longitudinal cross-section slice showing the lip-and-groove seam, OLED risers, RF shield can, and fluted rotary knob over the encoder shaft, plus a horizontal slice at Z=11mm showing M2.5 standoffs, side louvres, and rear USB-C alignment.](docs/img/hero-slices.png)
 
 Single-file [`uv`](https://docs.astral.sh/uv/) scripts — zero setup, inline dependencies — that turn a parametric model into something you (or an LLM agent) can actually *trust* before committing filament (or a fab order) to it:
 
@@ -30,6 +42,24 @@ A loupe is the glass a jeweler holds to a gem, a printer to a proof sheet — th
 
 ---
 
+## Electronics project workflow
+
+The shared tools also support a versioned local `loupe.json` project workflow:
+
+```sh
+uv run loupe.py --project /path/to/device doctor
+uv run loupe.py --project /path/to/device build
+uv run loupe.py --project /path/to/device check
+uv run loupe.py --project /path/to/device review
+uv run loupe.py --project /path/to/device release --target jlcpcb
+```
+
+Passing evidence is bound to input/output hashes and tool versions. Release rejects
+stale or missing evidence and produces local review bundles with checksums.
+Ordinary project builds preserve the reviewed native PCB and schematic.
+See [the workflow contract, limits and tests](docs/workflow.md).
+
+
 ## Why this exists
 
 The reliable way to do CAD with code in 2026 isn't GUI-automation-over-a-protocol, and it isn't text-to-CAD. It's three things working together:
@@ -42,9 +72,9 @@ This pipeline was built during a real reverse-engineering job — modeling a par
 
 It's written to be driven by a human at a terminal **or** by an AI coding agent — the contact sheet exists precisely because an agent can `Read` a PNG, and the deterministic checks exist because "looks right" is not a specification.
 
-![Two cross-section slices through a threaded jar whose lid has been shoved off-axis so the threads collide; the overlap is painted solid red and each tile's caption reads a measured interference area in mm².](docs/img/interference.png)
+![Staged collision on the 5-part Desk Sensor Pod: identical on the exterior isometric view, while a forgotten internal bezel rib crashes through the OLED module and RF shield can, painted bright red with 95.9 mm² and 56.0 mm² measured interference.](docs/img/interference.png)
 
-*A staged collision: the screw lid shoved off-axis so its thread crashes the neck. `sheet.py` paints the overlap red and prints the measured area into the caption; `check.py` turns the same fact into a nonzero exit code. This is the thing a pretty render can never tell you.*
+*A staged internal collision: identical from the outside, while a forgotten bezel rib crashes straight through the OLED display and RF shield can inside. `sheet.py` paints the overlap red and prints the measured area into the caption; `check.py` turns the same fact into a nonzero exit code. This is the thing a pretty render can never tell you.*
 
 ---
 
@@ -55,10 +85,10 @@ It's written to be driven by a human at a terminal **or** by an AI coding agent 
 - **`slice.py` only:** a local **Bambu Studio** install. Paths default to macOS (`/Applications/BambuStudio.app`); adjust the two constants at the top for Linux/Windows. The other three tools are cross-platform.
 
 ```sh
-git clone https://github.com/<you>/loupe.git
+git clone https://github.com/charlesbine/loupe.git
 cd loupe
 uv run check.py your_part.stl        # first run resolves deps; subsequent runs are instant
-uv run examples/threaded_jar.py      # regenerate the threaded-jar model used in the shots above
+uv run examples/sensor_pod.py        # regenerate the 5-part Desk Sensor Pod used in the shots above
 ```
 
 ---
@@ -68,6 +98,8 @@ uv run examples/threaded_jar.py      # regenerate the threaded-jar model used in
 ### `draft.py` / `draftcheck.py` / `draftsheet.py` — the planning stage
 
 `check.py` proves the model you built. It cannot tell you that you built the *wrong* model: a wall that's 1.8 mm when you meant 2.4 mm is watertight, collision-free, and wrong. A **draft** is the record that makes that a failing assertion — a YAML file of named dimensions, each with a tolerance and a note saying where the number came from, plus simple 2D profiles that reference them.
+
+![Dimensioned engineering draft sheet of a coupon case showing top and side orthographic drawings with tolerance callouts alongside a full dimension provenance table.](docs/img/draft-sheet.png)
 
 ```yaml
 dims:
@@ -107,13 +139,18 @@ uv run check.py part.stl --min-wall 1.2 --overhang 45 --json      # thin-wall + 
 
 - **Interference** = exact manifold boolean volume between every pair of parts, always reported.
 - **Clearance** samples part A's surface and measures signed distance to part B (negative = penetration). Scope it with `@z=lo:hi` — parts that legitimately touch elsewhere (a flange resting on a rim) otherwise read 0.
-- **Watertightness** is always checked. `--min-wall` is an inward ray-cast; `--overhang DEG` reports unsupported area (the bed face is excluded).
+- **Watertightness** is always checked. Wall preflight defaults to a 0.4 mm floor;
+  `--min-wall` changes it, and `--no-wall-check` explicitly opts out for reference geometry.
+  The checker samples opposing surfaces, reports sustained thin patches, and fails when
+  the wall backend is indeterminate. Sharp-edge diagnostics and sampling limits remain
+  visible; this does not certify physical printability. `--overhang DEG` reports
+  unsupported area (the bed face is excluded).
 
 ### `sheet.py` — labeled contact sheet (the reviewer's eyes)
 
 Renders one or more meshes into a single PNG: 8 named orthographic/iso views + custom camera angles, 2D cross-section slices with **automatic part-vs-part interference detection** (overlap painted red, mm² in the caption), 3D cutaways, and region zoom. Every tile is captioned with its camera position and screen axes — trust the captions, not your assumptions.
 
-![The default contact sheet of a cutlery-drawer insert: two isometric views plus front, back, left, right, top and bottom. The per-utensil channels read from the top, the ramped floor from the side, and the comb of channel walls head-on — each tile captioned with camera position and screen axes.](docs/img/contact-sheet.png)
+![A contact sheet of a multi-compartment insert: two isometric views plus front, back, left, right, top and bottom. The per-utensil channels read from the top, the ramped floor from the side, and the comb of channel walls head-on — each tile captioned with camera position and screen axes.](docs/img/contact-sheet.png)
 
 ```sh
 uv run sheet.py body.stl lid.stl -o sheet.png
@@ -132,9 +169,9 @@ uv run sheet.py a.stl --views none --slice z=10,20,30                    # slice
 
 ### `viewer.py` — self-contained browser viewer (the human's eyes)
 
-One HTML file (GLB embedded as base64, three.js from CDN): orbit controls, an adaptive mm grid with tick numbers in **world mm on all three axes**, per-part legend, explode toggle, auto-rotate (remembered in localStorage), and **double-ended clip sliders per axis** (keep the slab between two handles).
+One HTML file (GLB embedded as base64, three.js from CDN): orbit controls, an adaptive mm grid with occluded world-space tick labels on all three axes, per-part legend, explode toggle, auto-rotate (remembered in localStorage), and **double-ended clip sliders per axis** with **solid stencil section caps** (so clipped views read as cut solids instead of hollow shells).
 
-![The self-contained browser viewer showing a VFD-clock enclosure on a world-mm grid with colored X/Y/Z axes, a per-part legend, and explode and per-axis clip-plane controls.](docs/img/viewer.png)
+![The self-contained browser viewer showing the 5-part Desk Sensor Pod sectioned along Y=28mm with solid stencil section caps on a world-mm grid, exposing the fluted rotary knob, encoder shaft, beveled OLED window, RF shield can, and stepped enclosure seam alongside per-part legend, explode, and clip-plane controls.](docs/img/viewer.png)
 
 ```sh
 uv run viewer.py body.stl lid.stl -o preview.html --title "My part"
@@ -162,7 +199,7 @@ Defaults: P1S, 0.4 nozzle, 0.20 mm Standard, Bambu PLA Basic. Filament weight is
 
 ## The PCB pipeline
 
-The same philosophy pointed at circuit boards: the board is a program, verification is deterministic (KiCad's real DRC, headless), and review happens on a rendered contact sheet. **The board script IS the netlist** — no schematic, no GUI; declare parts, connect pads, place and route with computed coordinates.
+The same philosophy pointed at circuit boards: the board is a program, verification is deterministic (KiCad's real DRC, headless), and review happens on a rendered contact sheet. **The board script defines the PCB netlist**; native schematic generation/checks are available through the project workflow; declare parts, connect pads, place and route with computed coordinates.
 
 ![A PCB contact sheet: raytraced 3D renders of a small green board from top, bottom and isometric angles, above three white layer plots showing front copper with routed tracks, the back copper ground pour, and the silkscreen.](docs/img/pcb-sheet.png)
 
@@ -230,7 +267,7 @@ Model multi-part designs in **assembled coordinates** and export both the indivi
 This pipeline is built to be driven by an AI coding agent as much as a human. Two surfaces:
 
 - **[AGENTS.md](AGENTS.md)** — terse operational guide any agent harness (Claude Code, Cursor, Aider, …) can read: the review loop, the exact commands, and the gotchas that waste tokens.
-- **`loupe_mcp.py`** — an MCP server exposing `check`, `sheet`, and `slice`. Crucially, **`sheet` returns the contact sheet inline as an image**, so an agent sees the render in the same turn instead of writing a file and reading it back. Wire it up once:
+- **`loupe_mcp.py`** — an MCP server exposing all **7** tools: `draft_check`, `draft_sheet`, `check`, `sheet`, `slice`, `project_status`, and `project_run`. Crucially, **`sheet` and `draft_sheet` return their rendered drawings inline as PNGs**, so an agent sees the render in the same turn instead of writing a file and reading it back. Wire it up once:
 
   ```sh
   claude mcp add loupe -- uv run /ABS/PATH/TO/loupe/loupe_mcp.py
