@@ -24,6 +24,7 @@ unless absolute.
 from __future__ import annotations
 
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from contextlib import redirect_stdout
@@ -34,6 +35,8 @@ from typing import Literal
 from mcp.server.fastmcp import FastMCP, Image
 
 ROOT = Path(__file__).resolve().parent          # where the tool scripts live
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 mcp = FastMCP("loupe")
 
 
@@ -195,5 +198,9 @@ def project_run(project: str, action: Literal["build", "check", "review", "relea
     return json.dumps({"result": report, "log": log.getvalue()})
 
 
-if __name__ == "__main__":
+def main() -> None:
     mcp.run()
+
+
+if __name__ == "__main__":
+    main()

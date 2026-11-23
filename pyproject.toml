@@ -1,0 +1,86 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "loupe-cad"
+version = "1.0.1"
+description = "Code-CAD & PCB review pipeline and MCP server: deterministic geometry checks, contact sheets, 3D viewer, drafts, and KiCad 10 checks."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+requires-python = ">=3.11"
+authors = [{ name = "Charles Bine" }]
+keywords = [
+  "mcp",
+  "cad",
+  "code-cad",
+  "3d-printing",
+  "build123d",
+  "cadquery",
+  "kicad",
+  "pcb",
+  "stl",
+  "drc",
+  "hardware",
+]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Manufacturing",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Multimedia :: Graphics :: 3D Modeling",
+  "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
+]
+dependencies = ["mcp>=1.2,<2"]
+
+[project.urls]
+Homepage = "https://charlesbine.com/projects/loupe/"
+Repository = "https://github.com/charlesbine/loupe"
+Issues = "https://github.com/charlesbine/loupe/issues"
+
+[project.scripts]
+loupe-cad = "loupe_cad.loupe_mcp:main"
+loupe-mcp = "loupe_cad.loupe_mcp:main"
+loupe = "loupe_cad.loupe:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["loupe_cad"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"check.py" = "loupe_cad/check.py"
+"draft.py" = "loupe_cad/draft.py"
+"draftcheck.py" = "loupe_cad/draftcheck.py"
+"draftsheet.py" = "loupe_cad/draftsheet.py"
+"electronics.py" = "loupe_cad/electronics.py"
+"kicad_sexpr.py" = "loupe_cad/kicad_sexpr.py"
+"loupe.py" = "loupe_cad/loupe.py"
+"loupe_mcp.py" = "loupe_cad/loupe_mcp.py"
+"pcb.py" = "loupe_cad/pcb.py"
+"pcbcheck.py" = "loupe_cad/pcbcheck.py"
+"pcbfab.py" = "loupe_cad/pcbfab.py"
+"pcbsheet.py" = "loupe_cad/pcbsheet.py"
+"routing.py" = "loupe_cad/routing.py"
+"schematic.py" = "loupe_cad/schematic.py"
+"sheet.py" = "loupe_cad/sheet.py"
+"slice.py" = "loupe_cad/slice.py"
+"viewer.py" = "loupe_cad/viewer.py"
+"workflow.py" = "loupe_cad/workflow.py"
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "*.py",
+  "loupe_cad/*.py",
+  "README.md",
+  "LICENSE",
+  "NOTICE",
+  "AGENTS.md",
+  "server.json",
+  "docs/workflow.md",
+  "examples/*",
+]
+exclude = ["test_*.py"]
