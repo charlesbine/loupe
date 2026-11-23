@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "loupe",
+  "version": "1.0.1",
+  "description": "Code-CAD & PCB review pipeline for 3D printing and KiCad 10.",
+  "owner": {
+    "name": "Charles Bine",
+    "url": "https://charlesbine.com"
+  },
+  "plugins": [
+    {
+      "name": "loupe",
+      "description": "7-tool MCP server + CAD/PCB review skill for build123d, CadQuery, STL assemblies, and KiCad 10 boards.",
+      "version": "1.0.1",
+      "source": "./"
+    }
+  ]
+}

@@ -1,3 +1,5 @@
+<!-- mcp-name: io.github.charlesbine/loupe -->
+
 <div align="center">
 
 # loupe
@@ -264,14 +266,39 @@ Model multi-part designs in **assembled coordinates** and export both the indivi
 
 ## For agents
 
-This pipeline is built to be driven by an AI coding agent as much as a human. Two surfaces:
+This pipeline is built to be driven by an AI coding agent as much as a human. Three surfaces:
 
-- **[AGENTS.md](AGENTS.md)** — terse operational guide any agent harness (Claude Code, Cursor, Aider, …) can read: the review loop, the exact commands, and the gotchas that waste tokens.
-- **`loupe_mcp.py`** — an MCP server exposing all **7** tools: `draft_check`, `draft_sheet`, `check`, `sheet`, `slice`, `project_status`, and `project_run`. Crucially, **`sheet` and `draft_sheet` return their rendered drawings inline as PNGs**, so an agent sees the render in the same turn instead of writing a file and reading it back. Wire it up once:
+- **`loupe-cad` MCP server (via `uvx`):** Exposes all **7** tools (`draft_check`, `draft_sheet`, `check`, `sheet`, `slice`, `project_status`, and `project_run`). Crucially, **`sheet` and `draft_sheet` return their rendered drawings inline as PNGs**, so an agent sees the render in the same turn instead of writing a file and reading it back.
 
+  **Claude Code (MCP one-liner):**
+  ```sh
+  claude mcp add loupe -- uvx loupe-cad
+  ```
+
+  **Claude Code Plugin & Agent Skill (`MCP` + lazy-loaded `SKILL.md`):**
+  ```sh
+  /plugin marketplace add charlesbine/loupe
+  /plugin install loupe@loupe
+  ```
+
+  **Claude Desktop / Cursor / VS Code (`mcp.json`):**
+  ```json
+  {
+    "mcpServers": {
+      "loupe": {
+        "command": "uvx",
+        "args": ["loupe-cad"]
+      }
+    }
+  }
+  ```
+
+  **From a local checkout (no PyPI needed):**
   ```sh
   claude mcp add loupe -- uv run /ABS/PATH/TO/loupe/loupe_mcp.py
   ```
+
+- **[skills/loupe/SKILL.md](skills/loupe/SKILL.md)** & **[AGENTS.md](AGENTS.md)** — portable agent skill and terse operational runbook any coding agent (Claude Code, Cursor, Codex, Antigravity, Aider) can load for the exact review loop, coordinate conventions, and gotchas that waste tokens.
 
 ---
 
