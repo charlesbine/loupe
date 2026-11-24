@@ -186,16 +186,19 @@ The grid coordinates match `sheet.py`'s slice coordinates exactly — "clip Z 50
 
 ### `slice.py` — headless Bambu Studio
 
-Wraps the Bambu Studio CLI (P1S profiles by default): slices one arranged plate and reports success/error, predicted print time, filament grams/meters, spool cost, per-object bounding boxes, and slicer warnings. Writes the ready-to-print `.gcode.3mf` next to the inputs.
+Wraps the Bambu Studio CLI (P1S profiles by default): slices one arranged plate and reports success/error, predicted print time, filament grams/meters, spool cost, per-object bounding boxes, slicer warnings, and the plate with its first-layer bed temperature (`bed: Textured PEI Plate @ 55C`). Writes the ready-to-print `.gcode.3mf` next to the inputs only if the slice passes an audit.
+
+**The audit.** Run bare, the Bambu Studio CLI produces slices that print badly. It assumes a Cool Plate, which puts PLA on a 35 °C bed that won't hold on the textured PEI plate a P1S ships with. It also drops values from deeper parents in a profile's `inherits` chain, including the printer's real start G-code with bed leveling and the purge line. `slice.py` merges each profile's full chain, passes `--bed-type` (default `Textured PEI Plate`), and then compares the output with those profiles: plate type, first-layer bed and nozzle temperatures, machine start G-code, and filament. Any mismatch exits nonzero and writes no `.gcode.3mf`.
 
 ```sh
 uv run slice.py part1.stl part2.stl                         # one plate, P1S defaults
 uv run slice.py part.stl --process "0.12mm Fine @BBL X1C" \
     --filament "Bambu PETG Basic @BBL P1S 0.4 nozzle"
+uv run slice.py part.stl --bed-type "Cool Plate"            # the plate actually installed
 uv run slice.py --list-processes | --list-filaments | --list-machines
 ```
 
-Defaults: P1S, 0.4 nozzle, 0.20 mm Standard, Bambu PLA Basic. Filament weight is computed from the gcode's extruded length × profile density (the CLI leaves `used_g` at 0). **macOS/Bambu-specific** — edit the `APP` and `PROFILES` paths at the top for other platforms.
+Defaults: P1S, 0.4 nozzle, 0.20 mm Standard, Bambu PLA Basic, Textured PEI Plate. Filament weight is computed from the gcode's extruded length × profile density (the CLI leaves `used_g` at 0). **macOS/Bambu-specific** — edit the `APP` and `PROFILES` paths at the top for other platforms.
 
 ---
 
@@ -291,6 +294,13 @@ This pipeline is built to be driven by an AI coding agent as much as a human. Th
       }
     }
   }
+  ```
+
+  **Pinned command-line tools:** the package also installs `loupe-check`, `loupe-sheet`,
+  `loupe-viewer` and `loupe-slice`, which take the same arguments as the scripts. Pin the
+  version so a project keeps using the release it was checked with:
+  ```sh
+  uvx --from loupe-cad==1.0.2 loupe-slice part.stl
   ```
 
   **From a local checkout (no PyPI needed):**

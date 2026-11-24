@@ -159,16 +159,22 @@ def slice_(
     files: list[str],
     process: str | None = None,
     filament: str | None = None,
+    bed_type: str | None = None,
 ) -> str:
     """Headless Bambu Studio estimate: success/error, print time, filament
-    grams/meters, spool cost, per-object boxes, slicer warnings. Requires a
-    local Bambu Studio install. Writes the .gcode.3mf next to the inputs.
+    grams/meters, spool cost, per-object boxes, slicer warnings, and the plate
+    and first-layer bed temperature. Requires a local Bambu Studio install.
+    bed_type is the plate on the printer (default "Textured PEI Plate").
+    The slice is audited against the standard profiles; a mismatch fails and
+    writes no .gcode.3mf. Otherwise it is written next to the inputs.
     """
     args = list(files)
     if process:
         args += ["--process", process]
     if filament:
         args += ["--filament", filament]
+    if bed_type:
+        args += ["--bed-type", bed_type]
     r = _run("slice.py", args)
     return (r.stdout + r.stderr).strip() or "(no output)"
 

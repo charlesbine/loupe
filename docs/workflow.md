@@ -98,12 +98,15 @@ Validation commands:
 ```sh
 python3 -m unittest discover -p test_workflow.py -v
 uv run test_check.py
+python3 -m unittest test_slice -v
 ```
 
 `test_workflow.py` covers stale sources/reports/tools, failed reruns, release membership,
 private/escaping paths, dependencies, symbol inheritance and pin/placement regressions.
 `test_check.py` uses self-contained synthetic fixtures for localized thin regions, sharp-edge
-handling and indeterminate checks. Consumer-specific saved-artifact tests belong in the
+handling and indeterminate checks. `test_slice.py` covers the slice audit (Cool Plate default,
+bed temperature, start G-code, nozzle and filament) and profile-inheritance merging with
+synthetic profiles, so it needs no Bambu Studio. Consumer-specific saved-artifact tests belong in the
 consumer repository and are not discovered or read by this public test suite.
 Native KiCad/router integration is exercised separately by examples/route_fixture.py.
 The external reference project is an external acceptance consumer; do not vendor its secrets,
