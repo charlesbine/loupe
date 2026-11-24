@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "loupe-cad"
-version = "1.0.1"
+version = "1.0.2"
 description = "Code-CAD & PCB review pipeline and MCP server: deterministic geometry checks, contact sheets, 3D viewer, drafts, and KiCad 10 checks."
 readme = "README.md"
 license = "Apache-2.0"
@@ -47,6 +47,10 @@ Issues = "https://github.com/charlesbine/loupe/issues"
 loupe-cad = "loupe_cad.loupe_mcp:main"
 loupe-mcp = "loupe_cad.loupe_mcp:main"
 loupe = "loupe_cad.loupe:main"
+loupe-check = "loupe_cad.tools_cli:check"
+loupe-sheet = "loupe_cad.tools_cli:sheet"
+loupe-viewer = "loupe_cad.tools_cli:viewer"
+loupe-slice = "loupe_cad.tools_cli:slice_"
 
 [tool.hatch.build.targets.wheel]
 packages = ["loupe_cad"]
@@ -68,6 +72,7 @@ packages = ["loupe_cad"]
 "schematic.py" = "loupe_cad/schematic.py"
 "sheet.py" = "loupe_cad/sheet.py"
 "slice.py" = "loupe_cad/slice.py"
+"tools_cli.py" = "loupe_cad/tools_cli.py"
 "viewer.py" = "loupe_cad/viewer.py"
 "workflow.py" = "loupe_cad/workflow.py"
 

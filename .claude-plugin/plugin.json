@@ -1,6 +1,6 @@
 {
   "name": "loupe",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Code-CAD & PCB review pipeline for 3D printing and KiCad 10: deterministic geometry verification, inline PNG contact sheets, planning-stage drafts, and content-bound electronics release checks.",
   "author": {
     "name": "Charles Bine",

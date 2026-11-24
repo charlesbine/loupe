@@ -3,7 +3,7 @@
   "name": "io.github.charlesbine/loupe",
   "title": "Loupe — Code-CAD & PCB Review Pipeline",
   "description": "Code-CAD & PCB review MCP: deterministic geometry checks, contact sheets, drafts, and KiCad checks.",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "websiteUrl": "https://charlesbine.com/projects/loupe/",
   "repository": {
     "url": "https://github.com/charlesbine/loupe",
@@ -13,7 +13,7 @@
     {
       "registryType": "pypi",
       "identifier": "loupe-cad",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"

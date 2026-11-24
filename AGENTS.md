@@ -60,7 +60,11 @@ not a spec — gate on the exit code, use the image to understand *why* it faile
   + 3D cutaways + region zoom. Every tile is captioned with camera + screen axes. **Read the PNG.**
 - **`viewer.py <stls> -o preview.html`** — self-contained browser viewer. This is for a **human**;
   don't render it expecting to read it yourself.
-- **`slice.py <stls> [--process ...] [--filament ...]`** — headless Bambu Studio: time, grams, cost.
+- **`slice.py <stls> [--process ...] [--filament ...] [--bed-type ...]`** — headless Bambu Studio: time,
+  grams, cost, and `bed: <plate> @ <temp>`. **Exits nonzero and writes no `.gcode.3mf`** when the slice
+  differs from the standard profiles (plate, temps, start G-code, filament). Set `--bed-type` to the
+  plate actually installed, and match `--filament` to the spool the printer reports. Read the `bed:`
+  line before sending a job.
   Needs a local Bambu Studio install (macOS paths by default).
 
 ## Draft gotchas
