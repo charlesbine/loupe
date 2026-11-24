@@ -66,8 +66,40 @@ class AuditTests(unittest.TestCase):
     def test_other_plate_uses_its_own_temperature(self):
         self.assertEqual(self.audit(*good("Cool Plate", 35), bed_type="Cool Plate"), [])
 
+    def test_generic_placeholder_start_gcode_is_rejected(self):
+        # The 2026-11-24 failure: the profile itself resolved to the root placeholder,
+        # so slice and profile agreed and the plain comparison passed.
+        gcode, config = good()
+        problems = slicer.audit(gcode, config, self.machine, FILAMENT, "Textured PEI Plate",
+                                generic_start=START)
+        self.assertIn("machine start G-code is the generic placeholder, not the printer's own",
+                      problems)
+
 
 class FlattenTests(unittest.TestCase):
+    def write(self, root, kind, profiles):
+        (root / kind).mkdir()
+        for name, data in profiles.items():
+            (root / kind / f"{name}.json").write_text(json.dumps(data))
+
+    def test_merges_included_templates(self):
+        # Bambu keeps each printer's real G-code in `include`d templates.
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self.write(root, "machine", {
+                "machine_common": {"machine_start_gcode": "generic", "machine_end_gcode": "generic"},
+                "printer template start": {"name": "printer template start",
+                                           "instantiation": "false",
+                                           "machine_start_gcode": "real start"},
+                "printer": {"inherits": "machine_common", "name": "printer",
+                            "include": ["printer template start"]},
+            })
+            with mock.patch.object(slicer, "PROFILES", root):
+                merged = slicer.flattened("machine", "printer")
+        self.assertEqual(merged["machine_start_gcode"], "real start")
+        self.assertEqual(merged["machine_end_gcode"], "generic")
+        self.assertEqual(merged["name"], "printer")
+        self.assertNotIn("include", merged)
     def test_merges_the_whole_inherits_chain(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

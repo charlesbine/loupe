@@ -62,7 +62,8 @@ not a spec — gate on the exit code, use the image to understand *why* it faile
   don't render it expecting to read it yourself.
 - **`slice.py <stls> [--process ...] [--filament ...] [--bed-type ...]`** — headless Bambu Studio: time,
   grams, cost, and `bed: <plate> @ <temp>`. **Exits nonzero and writes no `.gcode.3mf`** when the slice
-  differs from the standard profiles (plate, temps, start G-code, filament). Set `--bed-type` to the
+  differs from the standard profiles (plate, temps, start G-code, filament), or the start G-code is
+  Bambu's generic placeholder instead of the printer's own. Set `--bed-type` to the
   plate actually installed, and match `--filament` to the spool the printer reports. Read the `bed:`
   line before sending a job.
   Needs a local Bambu Studio install (macOS paths by default).

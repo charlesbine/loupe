@@ -51,9 +51,13 @@ def profile_path(kind: str, name: str) -> Path:
 
 
 def flattened(kind: str, name: str) -> dict:
-    """Merge a profile's whole `inherits` chain. The CLI drops values from the
-    deeper parents: PLA came out at a 45 C textured-plate bed, not 55, and the
-    P1S lost its real start G-code (leveling and purge line)."""
+    """Merge a profile's whole `inherits` chain, plus the templates each profile
+    pulls in with `include`. The CLI drops values from the deeper parents: PLA
+    came out at a 45 C textured-plate bed, not 55. Bambu keeps each printer's
+    real G-code (start, end, layer change, filament change) in `include`d
+    templates; without them the P1S fell back to fdm_machine_common's generic
+    start G-code, which skips the textured-plate Z trim and purges on the left
+    edge, and nothing stuck on 2026-11-24."""
     chain = []
     while name:
         data = json.loads(profile_path(kind, name).read_text())
@@ -61,10 +65,16 @@ def flattened(kind: str, name: str) -> dict:
         name = data.get("inherits", "")
     merged: dict = {}
     for data in reversed(chain):
+        for template in data.get("include", []):
+            merged.update(json.loads(profile_path(kind, template).read_text()))
         merged.update(data)
-    merged.pop("inherits", None)
+    for key in ("inherits", "include"):
+        merged.pop(key, None)
     merged["from"] = "system"
     return merged
+
+
+GENERIC_MACHINE = "fdm_machine_common"  # Bambu's root profile; its G-code is a placeholder.
 
 
 BED_TEMP_KEY = {
@@ -81,8 +91,11 @@ def first(value):
     return value[0] if isinstance(value, list) else value
 
 
-def audit(gcode: str, config: dict, machine: dict, filament: dict, bed_type: str) -> list[str]:
-    """Compare the sliced output with the standard profiles. Any difference fails."""
+def audit(gcode: str, config: dict, machine: dict, filament: dict, bed_type: str,
+          generic_start: str | None = None) -> list[str]:
+    """Compare the sliced output with the standard profiles. Any difference fails.
+    `generic_start` is the root profile's placeholder start G-code. Matching the
+    printer profile isn't enough if that profile itself resolved to it."""
     problems = []
     if config.get("curr_bed_type") != bed_type:
         problems.append(f"plate is {config.get('curr_bed_type')!r}, expected {bed_type!r}")
@@ -95,6 +108,8 @@ def audit(gcode: str, config: dict, machine: dict, filament: dict, bed_type: str
         problems.append(f"nozzle {config.get('nozzle_temperature_initial_layer')}, profile says {want_nozzle}")
     if config.get("machine_start_gcode") != machine.get("machine_start_gcode"):
         problems.append("machine start G-code differs from the printer profile")
+    if generic_start and config.get("machine_start_gcode") == generic_start:
+        problems.append("machine start G-code is the generic placeholder, not the printer's own")
     if first(config.get("filament_settings_id")) != filament.get("name"):
         problems.append(f"filament {config.get('filament_settings_id')}, expected {filament.get('name')}")
     return problems
@@ -225,8 +240,10 @@ def main() -> None:
                 with zipfile.ZipFile(src) as z:
                     config = json.loads(z.read("Metadata/project_settings.config"))
                     sliced = z.read("Metadata/plate_1.gcode").decode(errors="ignore")
+                generic = json.loads(profile_path("machine", GENERIC_MACHINE).read_text())
                 problems = audit(sliced, config, flattened("machine", args.machine),
-                                 flattened("filament", args.filament), args.bed_type)
+                                 flattened("filament", args.filament), args.bed_type,
+                                 generic.get("machine_start_gcode"))
             if problems:
                 summary.update(ok=False, error="non-standard slice, not saved: " + "; ".join(problems))
             else:
