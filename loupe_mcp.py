@@ -133,19 +133,27 @@ def draft_check(spec: str, stl: list[str] | None = None) -> str:
 
 
 @mcp.tool()
-def draft_sheet(spec: str, views: str | None = None) -> Image:
+def draft_sheet(
+    spec: str,
+    views: str | None = None,
+    theme: Literal["light", "dark"] = "light",
+    accent: str | None = None,
+) -> Image:
     """Render a draft's dimensioned drawing and return it INLINE as a PNG to read now.
 
     Each view is drawn with real extension lines, arrowheads, ⌀/R callouts and ±
     tolerances, beside a table of every dimension with its value, tolerance and
     provenance. Dimensions are measured off the resolved geometry, so an expression
-    that evaluates wrong shows a wrong number on the drawing.
+    that evaluates wrong shows a wrong number on the drawing. Pass theme="dark" for
+    white-on-charcoal blueprint tiles.
     """
     out = Path(tempfile.mkstemp(suffix=".png")[1])
     try:
-        args = [spec, "-o", str(out)]
+        args = [spec, "-o", str(out), "--theme", theme]
         if views:
             args += ["--views", views]
+        if accent:
+            args += ["--accent", accent]
         r = _run("draftsheet.py", args)
         if not out.exists() or out.stat().st_size == 0:
             raise RuntimeError(f"draftsheet.py produced no image:\n{r.stdout}\n{r.stderr}".strip())

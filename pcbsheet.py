@@ -14,6 +14,7 @@ so what you see is what the fab gets. Every tile is captioned. Read the PNG.
 
 Usage:
   uv run pcbsheet.py out/blinky.kicad_pcb -o out/blinky_sheet.png
+  uv run pcbsheet.py out/blinky.kicad_pcb --dark -o out/blinky_sheet.png
   uv run pcbsheet.py out/blinky.kicad_pcb --no-3d          # layer plots only (faster)
 """
 from __future__ import annotations
@@ -26,19 +27,44 @@ import tempfile
 from pathlib import Path
 
 import pypdfium2 as pdfium
-from PIL import Image, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageOps
 
 from pcb import kicad_cli  # noqa: E402  (zero-dep sibling)
 
-# ---- style, matched to sheet.py
-BG = (24, 26, 31)
-TILE_BG = (30, 33, 39)
-CAPTION_BG = (42, 46, 54)
-TEXT = (214, 218, 224)
-DIM_TEXT = (150, 156, 166)
+# ---- style, matched to sheet.py / draftsheet.py
+THEMES = {
+    "light": {
+        "bg": (24, 26, 31),
+        "tile_bg": (30, 33, 39),
+        "caption_bg": (42, 46, 54),
+        "text": (214, 218, 224),
+        "dim_text": (150, 156, 166),
+        "plot_bg": None,
+        "render_bg": "opaque",
+    },
+    "dark": {
+        "bg": (16, 19, 24),
+        "tile_bg": (18, 22, 30),
+        "caption_bg": (26, 33, 48),
+        "text": (224, 232, 242),
+        "dim_text": (142, 156, 174),
+        "plot_bg": "#12161e",
+        "render_bg": "transparent",
+    },
+}
+BG = THEMES["light"]["bg"]
+TILE_BG = THEMES["light"]["tile_bg"]
+CAPTION_BG = THEMES["light"]["caption_bg"]
+TEXT = THEMES["light"]["text"]
+DIM_TEXT = THEMES["light"]["dim_text"]
 TILE_W, TILE_H = 560, 460
 CAPTION_H = 26
 HEADER_H = 34
+
+
+def _hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
+    s = hex_color.strip().lstrip("#")
+    return (int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16))
 
 
 def font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
@@ -56,10 +82,10 @@ def run(cmd: list[str]) -> subprocess.CompletedProcess:
 
 
 def render3d(board: Path, out: Path, side: str, rotate: str | None,
-             zoom: float) -> bool:
+             zoom: float, background: str = "opaque") -> bool:
     base = [kicad_cli(), "pcb", "render", board, "-o", out,
             "--width", "1120", "--height", "880", "--quality", "high",
-            "--background", "opaque", "--side", side, "--zoom", str(zoom)]
+            "--background", background, "--side", side, "--zoom", str(zoom)]
     for cmd in ([base + ["--rotate", rotate]] if rotate else []) + [base]:
         r = run(cmd)
         if r.returncode == 0 and out.exists():
@@ -68,12 +94,31 @@ def render3d(board: Path, out: Path, side: str, rotate: str | None,
     return False
 
 
-def plot2d(board: Path, layers: str, out_png: Path, mirror: bool = False) -> bool:
+def autocrop_plot(img: Image.Image, bg_color: str | None = None, pad: int = 40) -> Image.Image:
+    """Crop a rasterized layer plot to its drawn content against light or dark paper."""
+    if bg_color:
+        bg_rgb = _hex_to_rgb(bg_color)
+        diff = ImageChops.difference(img.convert("RGB"), Image.new("RGB", img.size, bg_rgb))
+        mask = diff.convert("L").point(lambda v: 255 if v > 4 else 0)
+        bbox = mask.getbbox()
+    else:
+        bbox = ImageOps.invert(img.convert("L")).getbbox()
+    if not bbox:
+        return img
+    bbox = (max(0, bbox[0] - pad), max(0, bbox[1] - pad),
+            min(img.width, bbox[2] + pad), min(img.height, bbox[3] + pad))
+    return img.crop(bbox)
+
+
+def plot2d(board: Path, layers: str, out_png: Path, mirror: bool = False,
+           bg_color: str | None = None) -> bool:
     """kicad-cli PDF plot of `layers` -> autocropped PNG (fab ground truth)."""
     with tempfile.TemporaryDirectory() as td:
         pdf = Path(td) / "plot.pdf"
         cmd = [kicad_cli(), "pcb", "export", "pdf", board, "-o", pdf,
                "--layers", layers]
+        if bg_color:
+            cmd += ["--bg-color", bg_color]
         if mirror:
             cmd.append("--mirror")
         r = run(cmd)
@@ -82,30 +127,33 @@ def plot2d(board: Path, layers: str, out_png: Path, mirror: bool = False) -> boo
             return False
         page = pdfium.PdfDocument(str(pdf))[0]
         img = page.render(scale=8.0).to_pil().convert("RGB")
-        # autocrop to drawn content (page is mostly white)
-        bbox = ImageOps.invert(img.convert("L")).getbbox()
-        if bbox:
-            pad = 40
-            bbox = (max(0, bbox[0] - pad), max(0, bbox[1] - pad),
-                    min(img.width, bbox[2] + pad), min(img.height, bbox[3] + pad))
-            img = img.crop(bbox)
+        img = autocrop_plot(img, bg_color=bg_color)
         img.save(out_png)
         return True
 
 
-def tile(img_path: Path | None, caption: str, hint: str) -> Image.Image:
-    t = Image.new("RGB", (TILE_W, TILE_H + CAPTION_H), TILE_BG)
+def tile(img_path: Path | None, caption: str, hint: str,
+         theme: dict | None = None) -> Image.Image:
+    th = theme or THEMES["light"]
+    t = Image.new("RGB", (TILE_W, TILE_H + CAPTION_H), th["tile_bg"])
     d = ImageDraw.Draw(t)
     if img_path and img_path.exists():
-        img = Image.open(img_path).convert("RGB")
-        img.thumbnail((TILE_W - 8, TILE_H - 8), Image.LANCZOS)
+        raw = Image.open(img_path)
+        if raw.mode in ("RGBA", "LA") or "transparency" in raw.info:
+            rgba = raw.convert("RGBA")
+            rgba.thumbnail((TILE_W - 8, TILE_H - 8), Image.LANCZOS)
+            bg_patch = Image.new("RGBA", rgba.size, (*th["tile_bg"], 255))
+            img = Image.alpha_composite(bg_patch, rgba).convert("RGB")
+        else:
+            img = raw.convert("RGB")
+            img.thumbnail((TILE_W - 8, TILE_H - 8), Image.LANCZOS)
         t.paste(img, ((TILE_W - img.width) // 2, (TILE_H - img.height) // 2))
     else:
-        d.text((TILE_W // 2, TILE_H // 2), "render failed", fill=DIM_TEXT,
+        d.text((TILE_W // 2, TILE_H // 2), "render failed", fill=th["dim_text"],
                font=font(16), anchor="mm")
-    d.rectangle([0, TILE_H, TILE_W, TILE_H + CAPTION_H], fill=CAPTION_BG)
-    d.text((8, TILE_H + CAPTION_H // 2), caption, fill=TEXT, font=font(13), anchor="lm")
-    d.text((TILE_W - 8, TILE_H + CAPTION_H // 2), hint, fill=DIM_TEXT,
+    d.rectangle([0, TILE_H, TILE_W, TILE_H + CAPTION_H], fill=th["caption_bg"])
+    d.text((8, TILE_H + CAPTION_H // 2), caption, fill=th["text"], font=font(13), anchor="lm")
+    d.text((TILE_W - 8, TILE_H + CAPTION_H // 2), hint, fill=th["dim_text"],
            font=font(12), anchor="rm")
     return t
 
@@ -116,7 +164,12 @@ def main() -> None:
     ap.add_argument("-o", "--output", type=Path, default=None)
     ap.add_argument("--no-3d", action="store_true", help="skip raytraced views")
     ap.add_argument("--zoom", type=float, default=1.0, help="3D zoom factor")
+    ap.add_argument("--theme", choices=("light", "dark"), default="light",
+                    help="sheet palette: light (default, white layer plots) or dark (#12161e canvas)")
+    ap.add_argument("--dark", action="store_true", help="shorthand for --theme dark")
     args = ap.parse_args()
+    theme_name = "dark" if args.dark else args.theme
+    th = THEMES[theme_name]
     out_png = args.output or args.board.with_name(args.board.stem + "_sheet.png")
 
     # board stats from the pcb.py spec, if it lives next door
@@ -136,24 +189,24 @@ def main() -> None:
                       ("top", "-35,0,25", "3D · iso", "raytraced")]
             for i, (side, rot, cap, hint) in enumerate(jobs3d):
                 p = tmp / f"r{i}.png"
-                render3d(args.board, p, side, rot, args.zoom)
-                tiles.append(tile(p if p.exists() else None, cap, hint))
+                render3d(args.board, p, side, rot, args.zoom, background=th["render_bg"])
+                tiles.append(tile(p if p.exists() else None, cap, hint, theme=th))
         jobs2d = [("F.Cu,Edge.Cuts", False, "F.Cu + edge", "plot · from front"),
                   ("B.Cu,Edge.Cuts", False, "B.Cu + edge", "plot · from front"),
                   ("F.SilkS,F.Mask,Edge.Cuts", False, "F.Silk + F.Mask", "plot · from front")]
         for i, (layers, mirror, cap, hint) in enumerate(jobs2d):
             p = tmp / f"p{i}.png"
-            plot2d(args.board, layers, p, mirror)
-            tiles.append(tile(p if p.exists() else None, cap, hint))
+            plot2d(args.board, layers, p, mirror, bg_color=th["plot_bg"])
+            tiles.append(tile(p if p.exists() else None, cap, hint, theme=th))
 
         cols = 3
         rows = (len(tiles) + cols - 1) // cols
         sheet = Image.new("RGB", (cols * TILE_W + (cols + 1) * 8,
-                                  HEADER_H + rows * (TILE_H + CAPTION_H + 8) + 8), BG)
+                                  HEADER_H + rows * (TILE_H + CAPTION_H + 8) + 8), th["bg"])
         d = ImageDraw.Draw(sheet)
-        d.text((10, HEADER_H // 2), args.board.stem, fill=TEXT, font=font(18), anchor="lm")
+        d.text((10, HEADER_H // 2), args.board.stem, fill=th["text"], font=font(18), anchor="lm")
         if stats:
-            d.text((sheet.width - 10, HEADER_H // 2), stats, fill=DIM_TEXT,
+            d.text((sheet.width - 10, HEADER_H // 2), stats, fill=th["dim_text"],
                    font=font(14), anchor="rm")
         for i, t in enumerate(tiles):
             x = 8 + (i % cols) * (TILE_W + 8)
