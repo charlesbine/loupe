@@ -113,10 +113,11 @@ dims:
 ```
 
 ```sh
-uv run draftcheck.py examples/coupon_case.draft.yaml            # the gate
-uv run draftsheet.py examples/coupon_case.draft.yaml -o case.png  # the eyes — then Read it
+uv run draftcheck.py examples/coupon_case.draft.yaml                          # the gate
+uv run draftsheet.py examples/coupon_case.draft.yaml -o case.png              # the eyes — then Read it
+uv run draftsheet.py examples/coupon_case.draft.yaml --dark -o case_dark.png  # dark blueprint theme
 uv run draft.py examples/coupon_case.draft.yaml --params dims.json
-uv run draftcheck.py examples/coupon_case.draft.yaml --stl asm_case.stl   # did the model drift?
+uv run draftcheck.py examples/coupon_case.draft.yaml --stl asm_case.stl       # did the model drift?
 ```
 
 The gate is cheap because nothing is a mesh yet: containment and wall thickness are exact 2D polygon distances. It catches a hole 0.2 mm from an edge, a feature off the part, a clearance that isn't the fit class you claimed, and an expression that won't resolve — before a single solid exists. Given the exported STL it runs the other way too, asserting the bounding box and every drafted hole's diameter and position against what was recorded.
@@ -171,7 +172,7 @@ uv run sheet.py a.stl --views none --slice z=10,20,30                    # slice
 
 ### `viewer.py` — self-contained browser viewer (the human's eyes)
 
-One HTML file (GLB embedded as base64, three.js from CDN): orbit controls, an adaptive mm grid with occluded world-space tick labels on all three axes, per-part legend, explode toggle, auto-rotate (remembered in localStorage), and **double-ended clip sliders per axis** with **solid stencil section caps** (so clipped views read as cut solids instead of hollow shells).
+One HTML file (GLB embedded as base64, three.js from CDN): orbit controls, an adaptive mm grid with occluded world-space tick labels on all three axes, compact pill legend, an unobtrusive top-right pill HUD (rotate, explode, collapsible clip drawer), **double-ended clip sliders per axis** with **solid stencil section caps**, and themeable `:root` CSS variables.
 
 ![The self-contained browser viewer showing the 5-part Desk Sensor Pod sectioned along Y=28mm with solid stencil section caps on a world-mm grid, exposing the fluted rotary knob, encoder shaft, beveled OLED window, RF shield can, and stepped enclosure seam alongside per-part legend, explode, and clip-plane controls.](docs/img/viewer.png)
 
@@ -179,10 +180,12 @@ One HTML file (GLB embedded as base64, three.js from CDN): orbit controls, an ad
 uv run viewer.py body.stl lid.stl -o preview.html --title "My part"
 uv run viewer.py case.stl panel.stl pcb.stl glass.stl io.stl \
     --group module=pcb,glass,io -o preview.html   # module stays rigid on explode
+uv run viewer.py asm_*.stl --exploded --rotate --bg "#080b10" --accent "#9fdcff" \
+    --css /demos/loupe-theme.css -o embed.html    # embed-ready showcase
 open preview.html
 ```
 
-The grid coordinates match `sheet.py`'s slice coordinates exactly — "clip Z 50:55" in the viewer and `--slice z=52` in the sheet are the same place. `--group NAME=a,b,c` (repeatable) makes those parts explode as one rigid body, so an assembly (PCB + glass + connectors) stays together while the shells fly off.
+The grid coordinates match `sheet.py`'s slice coordinates exactly — "clip Z 50:55" in the viewer and `--slice z=52` in the sheet are the same place. `--group NAME=a,b,c` (repeatable) makes those parts explode as one rigid body, so an assembly (PCB + glass + connectors) stays together while the shells fly off. `--css` links a URL (`/path` or `https://...`) or inlines a local `.css` file; you can also override initial state per embed with query params (`?exploded=1&rotate=1&clip=1&bg=080b10&accent=9fdcff`).
 
 ### `slice.py` — headless Bambu Studio
 
@@ -206,7 +209,7 @@ Defaults: P1S, 0.4 nozzle, 0.20 mm Standard, Bambu PLA Basic, Textured PEI Plate
 
 The same philosophy pointed at circuit boards: the board is a program, verification is deterministic (KiCad's real DRC, headless), and review happens on a rendered contact sheet. **The board script defines the PCB netlist**; native schematic generation/checks are available through the project workflow; declare parts, connect pads, place and route with computed coordinates.
 
-![A PCB contact sheet: raytraced 3D renders of a small green board from top, bottom and isometric angles, above three white layer plots showing front copper with routed tracks, the back copper ground pour, and the silkscreen.](docs/img/pcb-sheet.png)
+![A PCB contact sheet: raytraced 3D renders of a small green board from top, bottom and isometric angles, above three layer plots showing front copper with routed tracks, the back copper ground pour, and the silkscreen.](docs/img/pcb-sheet.png)
 
 ```python
 from pcb import Board
@@ -232,6 +235,7 @@ b.save("out")                                        # -> out/blinky.kicad_pcb
 uv run examples/blinky_coupon.py                     # the script above -> a real .kicad_pcb
 uv run pcbcheck.py examples/out/blinky.kicad_pcb     # KiCad DRC gate: nonzero exit on any error
 uv run pcbsheet.py examples/out/blinky.kicad_pcb     # contact sheet -> Read the PNG
+uv run pcbsheet.py examples/out/blinky.kicad_pcb --dark  # dark canvas for 3D + layer plots
 uv run pcbfab.py  examples/out/blinky.kicad_pcb --mesh   # gerbers.zip + BOM/CPL + STEP + STL
 ```
 

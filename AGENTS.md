@@ -49,16 +49,19 @@ not a spec — gate on the exit code, use the image to understand *why* it faile
   The planning gate: expression resolution, containment, 2D min-wall, `checks:`, fit classes,
   and — with `--stl` — bbox and hole diameter/position against the exported mesh.
   **Exits nonzero on a failed assertion.**
-- **`draftsheet.py <spec.yaml> [-o out.png] [--views a,b] [--dxf out.dxf]`**
+- **`draftsheet.py <spec.yaml> [-o out.png] [--views a,b] [--dxf out.dxf] [--theme light|dark|--dark] [--accent #HEX]`**
   Dimensioned drawing (extension lines, arrowheads, ⌀/R callouts, ± tolerances) plus a table
-  of every dim with its value, tolerance and provenance. **Read the PNG.**
+  of every dim with its value, tolerance and provenance. Pass `--dark` for white-on-charcoal
+  blueprint tiles. **Read the PNG.**
 - **`check.py <stls> [--interference-max MM3] [--min-wall MM] [--overhang DEG] [--clearance "a:b:gap@z=lo:hi"]`**
   Watertightness always; interference (exact boolean volume), thin-wall, unsupported-overhang,
   region-scoped clearance on request. **Exits nonzero on a failed assertion** — wire it into your gate.
 - **`sheet.py <stls> [-o out.png] [--views ...] [--slice z=50%] [--cutaway "y>50%"] [--roi "z=a:b"] [--view=AZ,EL]`**
   One labeled PNG: 8 named views + slices (part-vs-part interference painted red, mm² in caption)
   + 3D cutaways + region zoom. Every tile is captioned with camera + screen axes. **Read the PNG.**
-- **`viewer.py <stls> -o preview.html`** — self-contained browser viewer. This is for a **human**;
+- **`viewer.py <stls> -o preview.html [--exploded] [--rotate] [--bg #HEX] [--accent #HEX] [--css URL|FILE]`** —
+  self-contained browser viewer with a compact pill HUD and collapsible clip drawer (also
+  controllable via `?exploded=1&rotate=1&clip=1&bg=...&accent=...`). This is for a **human**;
   don't render it expecting to read it yourself.
 - **`slice.py <stls> [--process ...] [--filament ...] [--bed-type ...]`** — headless Bambu Studio: time,
   grams, cost, and `bed: <plate> @ <temp>`. **Exits nonzero and writes no `.gcode.3mf`** when the slice
@@ -105,7 +108,7 @@ not a spec — gate on the exit code, use the image to understand *why* it faile
 2. BUILD:  uv run my_board.py            -> .kicad_pcb via KiCad's bundled Python
 3. GATE:   uv run pcbcheck.py out/my_board.kicad_pcb
            -> nonzero = DRC error / unrouted net / netless pad. Fix before rendering.
-4. LOOK:   uv run pcbsheet.py out/my_board.kicad_pcb   then Read the PNG
+4. LOOK:   uv run pcbsheet.py out/my_board.kicad_pcb [--dark]   then Read the PNG
 5. FAB:    uv run pcbfab.py out/my_board.kicad_pcb --mesh
            -> gerbers.zip + JLC BOM/CPL + STEP + STL (the STL joins the 3D loop above)
 ```

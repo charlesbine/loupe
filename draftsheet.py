@@ -46,6 +46,26 @@ DIM_TEXT = (150, 156, 166)
 ACCENT = (90, 196, 184)
 PAPER = (255, 255, 255)
 
+THEMES = {
+    "light": {
+        "bg": BG, "caption_bg": CAPTION_BG, "table_bg": TABLE_BG,
+        "text": TEXT, "dim_text": DIM_TEXT, "accent": ACCENT,
+        "paper": PAPER, "paper_hex": "#ffffff", "dark": False,
+    },
+    "dark": {
+        "bg": (14, 17, 23), "caption_bg": (24, 29, 38), "table_bg": (18, 22, 30),
+        "text": (226, 232, 240), "dim_text": (148, 163, 184), "accent": ACCENT,
+        "paper": (18, 22, 30), "paper_hex": "#12161e", "dark": True,
+    },
+}
+
+
+def parse_hex_rgb(value: str) -> tuple[int, int, int]:
+    s = value.strip().lstrip("#")
+    if len(s) != 6 or any(c not in "0123456789abcdefABCDEF" for c in s):
+        raise DraftError(f"accent must be a 6-digit hex color like #9fdcff, got {value!r}")
+    return (int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16))
+
 TILE_W, TILE_H = 720, 560
 CAPTION_H = 26
 PAD = 12
@@ -170,43 +190,49 @@ def build_dxf(draft: Draft, view: View):
     return doc
 
 
-def render_dxf(doc, w: int, h: int) -> Image.Image:
+def render_dxf(doc, w: int, h: int, *, theme: dict | None = None) -> Image.Image:
+    th = theme or THEMES["light"]
     fig = plt.figure(figsize=(w / 100, h / 100), dpi=200)
     ax = fig.add_axes([0.04, 0.04, 0.92, 0.92])
+    bg_hex = th["paper_hex"]
+    fig.patch.set_facecolor(bg_hex)
+    ax.set_facecolor(bg_hex)
+    policy = ColorPolicy.WHITE if th["dark"] else ColorPolicy.BLACK
     try:
         Frontend(RenderContext(doc), MatplotlibBackend(ax),
-                 config=Configuration(color_policy=ColorPolicy.BLACK)
+                 config=Configuration(color_policy=policy)
                  ).draw_layout(doc.modelspace(), finalize=True)
         ax.set_aspect("equal", adjustable="box")
         ax.autoscale_view()
         ax.set_axis_off()
         buf = io.BytesIO()
-        fig.savefig(buf, format="png", dpi=200, facecolor="white")
+        fig.savefig(buf, format="png", dpi=200, facecolor=bg_hex)
     finally:
         plt.close(fig)
     buf.seek(0)
     raw = Image.open(buf).convert("RGB")
     raw.thumbnail((w - 16, h - 16), Image.LANCZOS)
-    canvas = Image.new("RGB", (w, h), PAPER)
+    canvas = Image.new("RGB", (w, h), th["paper"])
     canvas.paste(raw, ((w - raw.width) // 2, (h - raw.height) // 2))
     return canvas
 
 
 # ---------------------------------------------------------------- sheet assembly
-def caption(tile: Image.Image, text: str) -> Image.Image:
-    out = Image.new("RGB", (tile.width, tile.height + CAPTION_H), CAPTION_BG)
+def caption(tile: Image.Image, text: str, *, theme: dict | None = None) -> Image.Image:
+    th = theme or THEMES["light"]
+    out = Image.new("RGB", (tile.width, tile.height + CAPTION_H), th["caption_bg"])
     out.paste(tile, (0, 0))
     ImageDraw.Draw(out).text((8, tile.height + CAPTION_H // 2), text,
-                             font=font(13), fill=TEXT, anchor="lm")
+                             font=font(13), fill=th["text"], anchor="lm")
     return out
 
 
-def view_tile(draft: Draft, view: View) -> Image.Image:
-    img = render_dxf(build_dxf(draft, view), TILE_W, TILE_H)
+def view_tile(draft: Draft, view: View, *, theme: dict | None = None) -> Image.Image:
+    img = render_dxf(build_dxf(draft, view), TILE_W, TILE_H, theme=theme)
     xmin, ymin, xmax, ymax = view.outline.bounds
     return caption(img, f"{view.name}  ({view.plane})   extent "
                         f"{xmax - xmin:.4g} × {ymax - ymin:.4g} {draft.units}   "
-                        f"{len(view.features)} feature(s)")
+                        f"{len(view.features)} feature(s)", theme=theme)
 
 
 def _fit(dr: ImageDraw.ImageDraw, text: str, fnt, width: int) -> str:
@@ -218,28 +244,30 @@ def _fit(dr: ImageDraw.ImageDraw, text: str, fnt, width: int) -> str:
     return text + "…"
 
 
-def table_tile(draft: Draft, views: list[View], w: int, h: int) -> Image.Image:
-    img = Image.new("RGB", (w, h), TABLE_BG)
+def table_tile(draft: Draft, views: list[View], w: int, h: int, *,
+               theme: dict | None = None) -> Image.Image:
+    th = theme or THEMES["light"]
+    img = Image.new("RGB", (w, h), th["table_bg"])
     dr = ImageDraw.Draw(img)
     fh, ft, fb = mono(13), font(13), font(13, bold=True)
     y = PAD
-    dr.text((PAD, y), "DIMENSIONS", font=fb, fill=ACCENT); y += 22
+    dr.text((PAD, y), "DIMENSIONS", font=fb, fill=th["accent"]); y += 22
     cols = (PAD, PAD + 130, PAD + 215, PAD + 288)
     src_w = w - PAD - cols[3]
     for label, x in zip(("name", "value", "tol", "source / expression"), cols):
-        dr.text((x, y), label, font=ft, fill=DIM_TEXT)
+        dr.text((x, y), label, font=ft, fill=th["dim_text"])
     y += 18
     dr.line((PAD, y, w - PAD, y), fill=(60, 65, 75)); y += 8
 
     for name, d in draft.dims.items():
         if y > h - 24:
-            dr.text((PAD, y), "…", font=fh, fill=DIM_TEXT)
+            dr.text((PAD, y), "…", font=fh, fill=th["dim_text"])
             break
         src = ("= " + d.expr) if d.derived else (d.source or "")
-        for text, x, col in ((name, cols[0], TEXT),
-                             (f"{d.value:.4g}", cols[1], TEXT),
-                             (d.tol_text(), cols[2], DIM_TEXT),
-                             (_fit(dr, src, fh, src_w), cols[3], ACCENT if d.derived else DIM_TEXT)):
+        for text, x, col in ((name, cols[0], th["text"]),
+                             (f"{d.value:.4g}", cols[1], th["text"]),
+                             (d.tol_text(), cols[2], th["dim_text"]),
+                             (_fit(dr, src, fh, src_w), cols[3], th["accent"] if d.derived else th["dim_text"])):
             if text:
                 dr.text((x, y), text, font=fh, fill=col)
         y += 18
@@ -247,57 +275,61 @@ def table_tile(draft: Draft, views: list[View], w: int, h: int) -> Image.Image:
     feats = [(v.name, f) for v in views for f in v.features]
     if feats and y < h - 60:
         y += 12
-        dr.text((PAD, y), "FEATURES", font=fb, fill=ACCENT); y += 22
+        dr.text((PAD, y), "FEATURES", font=fb, fill=th["accent"]); y += 22
         for vn, f in feats:
             if y > h - 24:
-                dr.text((PAD, y), "…", font=fh, fill=DIM_TEXT)
+                dr.text((PAD, y), "…", font=fh, fill=th["dim_text"])
                 break
             size = f"⌀{2 * f.radius:.4g}" if f.kind == "circle" and f.radius else f.kind
-            dr.text((PAD, y), f"{vn}.{f.id}", font=fh, fill=TEXT)
-            dr.text((cols[1], y), size, font=fh, fill=TEXT)
+            dr.text((PAD, y), f"{vn}.{f.id}", font=fh, fill=th["text"])
+            dr.text((cols[1], y), size, font=fh, fill=th["text"])
             if f.note:
                 dr.text((cols[2], y), _fit(dr, f.note, fh, w - PAD - cols[2]),
-                        font=fh, fill=DIM_TEXT)
+                        font=fh, fill=th["dim_text"])
             y += 18
 
     if y < h - 40:
         y += 12
         if draft.min_wall is not None:
             dr.text((PAD, y), f"min_wall  {draft.min_wall:g} {draft.units}",
-                    font=fh, fill=DIM_TEXT)
+                    font=fh, fill=th["dim_text"])
             y += 18
         for f in draft.fits:
             if y > h - 24:
                 break
             dr.text((PAD, y), f"fit  {f.get('name', '?')}  ({f.get('class', '?')})",
-                    font=fh, fill=DIM_TEXT)
+                    font=fh, fill=th["dim_text"])
             y += 18
     return img
 
 
-def build_sheet(draft: Draft, views: list[View]) -> Image.Image:
-    tiles = [view_tile(draft, v) for v in views]
-    tw, th = tiles[0].width, tiles[0].height
+def build_sheet(draft: Draft, views: list[View], *, theme_name: str = "light",
+                accent: str | None = None) -> Image.Image:
+    th = dict(THEMES[theme_name])
+    if accent:
+        th["accent"] = parse_hex_rgb(accent)
+    tiles = [view_tile(draft, v, theme=th) for v in views]
+    tw, th_px = tiles[0].width, tiles[0].height
     cols = min(2, len(tiles))
     rows = (len(tiles) + cols - 1) // cols
     table_w = 560
     head_h = 46
 
     W = PAD + cols * (tw + PAD) + table_w + PAD
-    H = head_h + rows * (th + PAD) + PAD
-    sheet = Image.new("RGB", (W, H), BG)
+    H = head_h + rows * (th_px + PAD) + PAD
+    sheet = Image.new("RGB", (W, H), th["bg"])
     dr = ImageDraw.Draw(sheet)
     dr.text((PAD, head_h // 2), f"{draft.name}", font=font(20, bold=True),
-            fill=TEXT, anchor="lm")
+            fill=th["text"], anchor="lm")
     dr.text((W - PAD, head_h // 2),
             f"draft · {draft.path.name} · all dimensions {draft.units}",
-            font=font(13), fill=DIM_TEXT, anchor="rm")
+            font=font(13), fill=th["dim_text"], anchor="rm")
 
     for i, t in enumerate(tiles):
         x = PAD + (i % cols) * (tw + PAD)
-        y = head_h + (i // cols) * (th + PAD)
+        y = head_h + (i // cols) * (th_px + PAD)
         sheet.paste(t, (x, y))
-    sheet.paste(table_tile(draft, views, table_w, H - head_h - PAD),
+    sheet.paste(table_tile(draft, views, table_w, H - head_h - PAD, theme=th),
                 (PAD + cols * (tw + PAD), head_h))
     return sheet
 
@@ -309,6 +341,10 @@ def main() -> None:
     ap.add_argument("--views", help="comma list of views to draw (default: all)")
     ap.add_argument("--dxf", metavar="OUT.dxf",
                     help="also write the drawing as DXF (one view; opens in any CAD tool)")
+    ap.add_argument("--theme", choices=("light", "dark"), default="light",
+                    help="drawing tile theme: light paper (default) or dark blueprint")
+    ap.add_argument("--dark", action="store_true", help="shorthand for --theme dark")
+    ap.add_argument("--accent", help="override table accent hex color (e.g. #9fdcff)")
     a = ap.parse_args()
 
     try:
@@ -320,7 +356,8 @@ def main() -> None:
             if nm not in draft.views:
                 raise DraftError(f"unknown view {nm!r} (have: {', '.join(draft.views)})")
         views = [draft.views[nm] for nm in names]
-        sheet = build_sheet(draft, views)
+        theme_name = "dark" if a.dark else a.theme
+        sheet = build_sheet(draft, views, theme_name=theme_name, accent=a.accent)
         if a.dxf:
             build_dxf(draft, views[0]).saveas(a.dxf)
     except DraftError as e:

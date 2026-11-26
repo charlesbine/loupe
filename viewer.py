@@ -37,17 +37,39 @@ PALETTE = [
 HEX = ["#5ac4b8", "#e09e58", "#a896de", "#78cd96", "#e96e62", "#eee8cd", "#6ea0eb", "#de8cbe"]
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("files", nargs="+")
-    ap.add_argument("-o", "--out", default="preview.html")
-    ap.add_argument("--title", default=None)
-    ap.add_argument("--group", action="append", default=[], metavar="NAME=stemA,stemB",
-                    help="group parts by file stem so they explode as one rigid body (repeatable)")
-    args = ap.parse_args()
+def _norm_hex(value: str, flag: str) -> str:
+    s = value.strip().lstrip("#")
+    if len(s) != 6 or any(c not in "0123456789abcdefABCDEF" for c in s):
+        raise SystemExit(f"error: {flag} expects a 6-digit hex color like #080b10 (got {value!r})")
+    return "#" + s.lower()
 
+
+def _css_tag(css: str | None) -> str:
+    if not css:
+        return ""
+    if css.startswith(("http://", "https://")):
+        return f'<link rel="stylesheet" href="{css}">'
+    p = Path(css)
+    if p.is_file():
+        return f"<style>\n{p.read_text()}\n</style>"
+    if css.startswith("/"):
+        return f'<link rel="stylesheet" href="{css}">'
+    raise SystemExit(f"error: --css file not found: {css}")
+
+
+def build_html(
+    files: list[str | Path],
+    *,
+    title: str | None = None,
+    groups_spec: list[str] | None = None,
+    exploded: bool = False,
+    rotate: bool = False,
+    bg: str = "#1b1d22",
+    accent: str = "#7fb4e8",
+    css: str | None = None,
+) -> tuple[str, int]:
     meshes, legend = [], []
-    for i, f in enumerate(args.files):
+    for i, f in enumerate(files):
         m = trimesh.load(f, force="mesh", process=False)
         m.visual.face_colors = PALETTE[i % len(PALETTE)]
         meshes.append(m)
@@ -55,15 +77,15 @@ def main() -> None:
 
     # --group NAME=stemA,stemB  → parts in a group explode as one rigid unit
     stem_group = {}
-    for spec in args.group:
+    for spec in groups_spec or []:
         if "=" not in spec:
-            ap.error(f"--group needs NAME=stem,stem (got {spec!r})")
+            raise ValueError(f"--group needs NAME=stem,stem (got {spec!r})")
         gname, members = spec.split("=", 1)
         for s in members.split(","):
             if s.strip():
                 stem_group[s.strip()] = gname.strip()
     gid_of, groups = {}, []
-    for f in args.files:
+    for f in files:
         stem = Path(f).stem
         key = stem_group.get(stem, "\0" + stem)          # ungrouped → unique singleton
         groups.append(gid_of.setdefault(key, len(gid_of)))
@@ -73,57 +95,144 @@ def main() -> None:
 
     glb = trimesh.Scene(meshes).export(file_type="glb")
     b64 = base64.b64encode(glb).decode()
-    title = args.title or " + ".join(entry["name"] for entry in legend)
+    resolved_title = title or " + ".join(entry["name"] for entry in legend)
+    bg_hex = _norm_hex(bg, "--bg")
+    accent_hex = _norm_hex(accent, "--accent")
+    cfg = {
+        "exploded": bool(exploded),
+        "rotate": bool(rotate),
+        "bg": bg_hex,
+        "accent": accent_hex,
+    }
+    html = (
+        HTML.replace("__GLB__", b64)
+            .replace("__TITLE__", resolved_title)
+            .replace("__LEGEND__", json.dumps(legend))
+            .replace("__GROUPS__", json.dumps(groups))
+            .replace("__BG__", bg_hex)
+            .replace("__ACCENT__", accent_hex)
+            .replace("__CONFIG__", json.dumps(cfg))
+            .replace("__EXTRA_CSS__", _css_tag(css))
+    )
+    return html, len(glb)
 
-    html = HTML.replace("__GLB__", b64) \
-               .replace("__TITLE__", title) \
-               .replace("__LEGEND__", json.dumps(legend)) \
-               .replace("__GROUPS__", json.dumps(groups))
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("files", nargs="+")
+    ap.add_argument("-o", "--out", default="preview.html")
+    ap.add_argument("--title", default=None)
+    ap.add_argument("--group", action="append", default=[], metavar="NAME=stemA,stemB",
+                    help="group parts by file stem so they explode as one rigid body (repeatable)")
+    ap.add_argument("--exploded", action="store_true",
+                    help="start in exploded view (camera framed wider to fit)")
+    ap.add_argument("--rotate", action="store_true",
+                    help="start gently auto-rotating (can also be toggled in UI or ?rotate=1)")
+    ap.add_argument("--bg", default="#1b1d22",
+                    help="background hex color for page and 3D scene (default #1b1d22)")
+    ap.add_argument("--accent", default="#7fb4e8",
+                    help="accent hex color for active controls and sliders (default #7fb4e8)")
+    ap.add_argument("--css", default=None,
+                    help="extra CSS URL (/path or https://...) to link, or local .css file to inline")
+    args = ap.parse_args()
+
+    try:
+        html, glb_len = build_html(
+            args.files, title=args.title, groups_spec=args.group,
+            exploded=args.exploded, rotate=args.rotate,
+            bg=args.bg, accent=args.accent, css=args.css,
+        )
+    except ValueError as e:
+        ap.error(str(e))
     out = Path(args.out)
     out.write_text(html)
-    print(f"GLB {len(glb)//1024} KB -> {out}  ({out.stat().st_size//1024} KB self-contained)")
+    print(f"GLB {glb_len//1024} KB -> {out}  ({out.stat().st_size//1024} KB self-contained)")
 
 
 HTML = """<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>__TITLE__</title>
 <style>
-  html,body { margin:0; height:100%; background:#1b1d22; overflow:hidden;
-    font-family:system-ui,sans-serif; color:#d6dae0; }
+  :root {
+    --bg: __BG__;
+    --surface: rgba(24, 27, 34, 0.84);
+    --surface-drawer: rgba(20, 23, 30, 0.92);
+    --border: rgba(255, 255, 255, 0.16);
+    --text: #e6eaf0;
+    --muted: rgba(214, 218, 224, 0.72);
+    --accent: __ACCENT__;
+    --font: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); overflow:hidden;
+    font-family:var(--font); color:var(--text); -webkit-font-smoothing:antialiased; }
   canvas { display:block; }
-  .tag { position:fixed; top:14px; left:16px; font-size:13px; opacity:.7; }
-  .legend { position:fixed; bottom:16px; left:16px; font-size:13px; }
-  .sw { display:inline-block; width:11px; height:11px; border-radius:2px; margin:0 5px -1px 14px; }
-  #panel { position:fixed; right:14px; top:12px; width:230px; background:#22252c;
-    border:1px solid #3a404a; border-radius:9px; padding:10px 12px; font-size:13px; }
-  #panel button { width:100%; margin:3px 0; padding:7px 0; font-size:13px;
-    background:#2a2e36; color:#e6eaf0; border:1px solid #3a404a; border-radius:7px; cursor:pointer; }
-  #panel button:hover { background:#343a44; }
-  .cliprow { margin-top:8px; }
-  .cliprow label { display:flex; align-items:center; gap:6px; }
-  .dslider { position:relative; height:20px; }
+  .tag { position:fixed; top:12px; left:14px; max-width:calc(100% - 260px);
+    font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--muted);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; pointer-events:none; z-index:4; }
+  .legend { position:fixed; bottom:12px; left:14px; display:inline-flex; flex-wrap:wrap;
+    align-items:center; gap:6px 12px; padding:5px 10px; border-radius:999px;
+    background:var(--surface); border:1px solid var(--border); backdrop-filter:blur(8px);
+    font-size:10.5px; letter-spacing:.03em; color:var(--text); z-index:4; }
+  .legend-item { display:inline-flex; align-items:center; gap:5px; }
+  .sw { display:inline-block; width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  #panel { position:fixed; right:12px; top:10px; display:flex; flex-direction:column;
+    align-items:flex-end; gap:6px; z-index:10; }
+  .hud-bar { display:inline-flex; align-items:center; gap:4px; padding:4px; border-radius:999px;
+    background:var(--surface); border:1px solid var(--border); backdrop-filter:blur(10px);
+    box-shadow:0 8px 24px rgba(0,0,0,.4); }
+  .hud-bar button { margin:0; padding:4px 10px; border-radius:999px; border:1px solid transparent;
+    background:transparent; color:var(--muted); font-family:inherit; font-size:10.5px;
+    letter-spacing:.05em; text-transform:uppercase; cursor:pointer;
+    transition:background 140ms ease, color 140ms ease, border-color 140ms ease; }
+  .hud-bar button:hover { background:color-mix(in srgb, var(--accent) 14%, transparent); color:var(--text); }
+  .hud-bar button.active { background:color-mix(in srgb, var(--accent) 18%, transparent);
+    border-color:color-mix(in srgb, var(--accent) 48%, transparent); color:var(--accent); }
+  .clip-drawer { display:none; width:212px; padding:10px 12px; border-radius:8px;
+    background:var(--surface-drawer); border:1px solid var(--border); backdrop-filter:blur(12px);
+    box-shadow:0 14px 32px rgba(0,0,0,.52); font-size:11px; }
+  .clip-drawer.open { display:block; }
+  .clip-drawer button { width:100%; margin:0 0 8px; padding:5px 8px; font-family:inherit;
+    font-size:10.5px; letter-spacing:.05em; text-transform:uppercase; border-radius:5px;
+    background:color-mix(in srgb, var(--accent) 10%, transparent);
+    border:1px solid color-mix(in srgb, var(--accent) 26%, transparent);
+    color:var(--text); cursor:pointer; }
+  .clip-drawer button:hover { background:color-mix(in srgb, var(--accent) 18%, transparent); }
+  .cliprow { margin-top:6px; }
+  .cliprow label { display:flex; align-items:center; gap:6px; font-size:10.5px;
+    letter-spacing:.04em; text-transform:uppercase; color:var(--muted); }
+  .cliprow input[type=checkbox] { accent-color:var(--accent); }
+  .dslider { position:relative; height:18px; }
   .dslider input[type=range] { position:absolute; left:0; top:0; width:100%; margin:0;
-    background:none; pointer-events:none; -webkit-appearance:none; appearance:none; height:20px; }
-  .dslider input[type=range]::-webkit-slider-runnable-track { height:4px; background:#3a404a;
-    border-radius:2px; margin-top:8px; }
+    background:none; pointer-events:none; -webkit-appearance:none; appearance:none; height:18px; }
+  .dslider input[type=range]::-webkit-slider-runnable-track { height:3px;
+    background:color-mix(in srgb, var(--accent) 24%, transparent); border-radius:2px; margin-top:7px; }
   .dslider input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; appearance:none;
-    width:14px; height:14px; border-radius:50%; background:#7fb4e8; margin-top:-5px;
+    width:11px; height:11px; border-radius:50%; background:var(--accent); margin-top:-4px;
     pointer-events:auto; cursor:pointer; border:none; }
-  .dslider input[type=range]::-moz-range-track { height:4px; background:#3a404a; border-radius:2px; }
-  .dslider input[type=range]::-moz-range-thumb { width:14px; height:14px; border-radius:50%;
-    background:#7fb4e8; pointer-events:auto; cursor:pointer; border:none; }
+  .dslider input[type=range]::-moz-range-track { height:3px;
+    background:color-mix(in srgb, var(--accent) 24%, transparent); border-radius:2px; }
+  .dslider input[type=range]::-moz-range-thumb { width:11px; height:11px; border-radius:50%;
+    background:var(--accent); pointer-events:auto; cursor:pointer; border:none; }
+  @media (max-width: 560px) { .tag { display:none; } }
 </style>
+__EXTRA_CSS__
 <script type="importmap">{ "imports": {
   "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
   "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
 }}</script></head><body>
-<div class="tag">__TITLE__ &middot; grid = 1&thinsp;cm &middot; drag to orbit &middot; scroll to zoom</div>
+<div class="tag">__TITLE__ &middot; 1&thinsp;cm grid</div>
 <div class="legend" id="legend"></div>
 <div id="panel">
-  <button id="spin">stop rotation</button>
-  <button id="explode">explode</button>
-  <button id="caps">solid cut: on</button>
-  <div class="cliprow" id="clips"><b>clip planes</b></div>
+  <div class="hud-bar">
+    <button id="spin">Rotate</button>
+    <button id="explode">Explode</button>
+    <button id="clipToggle">Clip &#9662;</button>
+  </div>
+  <div class="clip-drawer" id="clipDrawer">
+    <button id="caps">solid cut: on</button>
+    <div id="clips"></div>
+  </div>
 </div>
 <script type="module">
 import * as THREE from 'three';
@@ -133,12 +242,22 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 const B64 = "__GLB__";
 const LEGEND = __LEGEND__;
 const GROUPS = __GROUPS__;
+const CFG = __CONFIG__;
+const QS = new URLSearchParams(location.search);
+const qBool = (k, def) => QS.has(k) ? !['0','false','off'].includes(QS.get(k).toLowerCase()) : def;
+const qHex = (k) => { const v = (QS.get(k) || '').replace(/^#/, ''); return /^[0-9a-fA-F]{6}$/.test(v) ? '#' + v : null; };
+const initBg = qHex('bg');
+const initAccent = qHex('accent');
+if (initBg) document.documentElement.style.setProperty('--bg', initBg);
+if (initAccent) document.documentElement.style.setProperty('--accent', initAccent);
+const resolvedBg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || CFG.bg;
+
 function toBuf(b64){ const s=atob(b64), n=s.length, a=new Uint8Array(n);
   for(let i=0;i<n;i++)a[i]=s.charCodeAt(i); return a.buffer; }
 
 document.getElementById('legend').innerHTML = LEGEND.map(l =>
-  `<span class="sw" style="background:${l.color}"></span>${l.name}` +
-  (l.group ? ` <span style="opacity:.45">&#9656;${l.group}</span>` : '')).join('');
+  `<span class="legend-item"><span class="sw" style="background:${l.color}"></span>${l.name}` +
+  (l.group ? ` <span style="opacity:.45">&#9656;${l.group}</span>` : '') + '</span>').join('');
 
 const renderer = new THREE.WebGLRenderer({ antialias:true });
 renderer.setSize(innerWidth, innerHeight);
@@ -151,18 +270,19 @@ renderer.localClippingEnabled = true;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1b1d22);
+scene.background = new THREE.Color(resolvedBg);
 const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 0.5, 8000);
 camera.up.set(0, 0, 1);                                  // Z up, millimeters
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
-const PREFKEY = 'vesper-viewer:' + document.title;
+const PREFKEY = 'loupe-viewer:' + document.title;
 let prefs = {};
 try { prefs = JSON.parse(localStorage.getItem(PREFKEY) || '{}'); } catch(e){}
 const savePrefs = () => { try { localStorage.setItem(PREFKEY, JSON.stringify(prefs)); } catch(e){} };
-controls.autoRotate = prefs.autoRotate === true;   // default OFF; only on if explicitly enabled
-controls.autoRotateSpeed = 1.3;
+const defaultRotate = qBool('rotate', CFG.rotate);
+controls.autoRotate = QS.has('rotate') ? defaultRotate : (prefs.autoRotate ?? defaultRotate);
+controls.autoRotateSpeed = 0.9;
 
 scene.add(new THREE.AmbientLight(0x8893a0, 0.65));
 const key = new THREE.DirectionalLight(0xffffff, 2.5);
@@ -204,7 +324,8 @@ const clipState = AXES.map(() => ({ on:false, lo:0, hi:0 }));
 
 const pieces = [];
 const capQuads = [];
-let explodeAmt = 0, explodeTarget = 0;
+const startExploded = qBool('exploded', CFG.exploded);
+let explodeAmt = startExploded ? 1 : 0, explodeTarget = startExploded ? 1 : 0;
 
 new GLTFLoader().parse(toBuf(B64), '', (gltf) => {
   const model = gltf.scene;
@@ -384,8 +505,9 @@ new GLTFLoader().parse(toBuf(B64), '', (gltf) => {
   });
 
   const r = Math.max(size.x, size.y, size.z);
+  const k = startExploded ? 1.16 : 1.0;
   controls.target.copy(center);
-  camera.position.set(center.x - r*1.22, center.y - r*1.90, center.z + r*1.38);
+  camera.position.set(center.x - r*1.22*k, center.y - r*1.90*k, center.z + r*1.38*k);
   camera.near = r/100; camera.far = r*40; camera.updateProjectionMatrix();
   key.position.set(center.x - r, center.y - r*0.8, center.z + r*2.2);
   key.target.position.copy(center);
@@ -412,15 +534,30 @@ addEventListener('resize', () => {
 })();
 
 const btn = document.getElementById('spin');
-const sync = () => btn.textContent = controls.autoRotate ? 'stop rotation' : 'start rotation';
+const sync = () => {
+  btn.textContent = controls.autoRotate ? 'Pause' : 'Rotate';
+  btn.classList.toggle('active', controls.autoRotate);
+};
 btn.onclick = () => { controls.autoRotate = !controls.autoRotate;
   prefs.autoRotate = controls.autoRotate; savePrefs(); sync(); };
 addEventListener('keydown', e => { if (e.code === 'Space'){ e.preventDefault(); btn.click(); }});
 sync();
 const exb = document.getElementById('explode');
-const exsync = () => exb.textContent = explodeTarget > 0.5 ? 'assemble' : 'explode';
+const exsync = () => {
+  exb.textContent = explodeTarget > 0.5 ? 'Assemble' : 'Explode';
+  exb.classList.toggle('active', explodeTarget > 0.5);
+};
 exb.onclick = () => { explodeTarget = explodeTarget > 0.5 ? 0 : 1; exsync(); };
 exsync();
+const clipToggle = document.getElementById('clipToggle');
+const clipDrawer = document.getElementById('clipDrawer');
+const setClipOpen = (open) => {
+  clipDrawer.classList.toggle('open', open);
+  clipToggle.classList.toggle('active', open);
+  clipToggle.innerHTML = open ? 'Clip &#9652;' : 'Clip &#9662;';
+};
+clipToggle.onclick = () => setClipOpen(!clipDrawer.classList.contains('open'));
+if (qBool('clip', false)) setClipOpen(true);
 </script></body></html>"""
 
 
